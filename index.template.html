@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Helium Workspace Archive</title>
+  <title>Browser Tabs Session Recorder</title>
   <style>
     :root {
       --ink: #f7f8fb;
@@ -63,7 +63,7 @@
       gap: 11px;
     }
 
-    .helium-logo {
+    .archive-logo {
       width: 38px;
       height: 38px;
       display: grid;
@@ -300,6 +300,7 @@
       user-select: none;
     }
     .browser-brand { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; color: #11150c; background: var(--accent); font-size: 9px; font-weight: 800; }
+    .browser-brand.chrome { color: #fff; background: #4285f4; }
     #window-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9bdc7; font-size: 10px; }
     .window-actions { height: 100%; display: flex; }
     .window-action { width: 42px; height: 100%; border: 0; color: #a9adb7; background: transparent; font-size: 12px; cursor: default; }
@@ -468,7 +469,7 @@
       .desktop-bar { gap: 8px; padding: 8px; }
       .archive-mark { min-width: auto; }
       .archive-mark > div:last-child { display: none; }
-      .helium-logo { width: 34px; height: 34px; }
+      .archive-logo { width: 34px; height: 34px; }
       .desktop-button { min-width: 94px; height: 48px; padding: 6px 7px 6px 37px; }
       .desktop-number { left: 7px; top: 7px; width: 24px; height: 32px; }
       .desktop-meta { display: none; }
@@ -494,8 +495,8 @@
   <main class="app">
     <header class="desktop-bar">
       <div class="archive-mark">
-        <div class="helium-logo">He</div>
-        <div><strong>Helium workspace</strong><small id="archive-date">Captured workspace</small></div>
+        <div class="archive-logo">Br</div>
+        <div><strong>Browser workspace</strong><small id="archive-date">Captured workspace</small></div>
       </div>
       <nav class="desktop-list" id="desktop-list" aria-label="Virtual desktops"></nav>
       <button class="task-view-button" id="task-view" type="button">Task view&nbsp;&nbsp; Win+Tab</button>
@@ -516,7 +517,7 @@
 
       <article class="browser-window" id="browser-window">
         <div class="titlebar">
-          <div class="browser-brand">He</div>
+          <div class="browser-brand" id="browser-brand">He</div>
           <span id="window-title"></span>
           <div class="window-actions" aria-hidden="true">
             <button class="window-action" tabindex="-1">─</button>
@@ -581,7 +582,8 @@
         statusDesktop: $("#status-desktop"), statusWindow: $("#status-window"), statusTitle: $("#status-title"),
         tabPosition: $("#tab-position"), previous: $("#previous-tab"), next: $("#next-tab"),
         taskWindows: $("#task-windows"), dialog: $("#overview-dialog"), overviewGrid: $("#overview-grid"),
-        overviewTitle: $("#overview-title"), overviewMeta: $("#overview-meta"), rail: $("#window-rail")
+        overviewTitle: $("#overview-title"), overviewMeta: $("#overview-meta"), rail: $("#window-rail"),
+        browserBrand: $("#browser-brand")
       };
 
       let saved = {};
@@ -602,6 +604,10 @@
       const currentDesktop = () => data[state.desktop];
       const currentWindow = () => currentDesktop().windows[state.window];
       const currentTab = () => currentWindow().tabs[state.tab];
+      const browserName = (windowData) => windowData.browser || "Helium";
+      const browserClass = (windowData) => browserName(windowData) === "Google Chrome" ? "chrome" : "helium";
+      const browserShortName = (windowData) => browserName(windowData) === "Google Chrome" ? "Ch" : "He";
+      const browserBrand = (windowData) => `<span class="browser-brand ${browserClass(windowData)}">${browserShortName(windowData)}</span>`;
       const trimTitle = (title, fallback) => (title || fallback || "Untitled").replace(/\s+-\s+YouTube(?:\s+-.*)?$/, "");
       const hostFor = (url) => {
         if (!url) return "new tab";
@@ -609,7 +615,7 @@
         return clean.split(/[/?#]/)[0] || "local";
       };
       const externalUrl = (url) => {
-        if (!url || /^(helium|chrome-extension):/i.test(url)) return "";
+        if (!url || /^(helium|chrome|chrome-extension):/i.test(url)) return "";
         return /^https?:\/\//i.test(url) ? url : "https://" + url;
       };
       const siteClass = (url) => /(^|\.)youtube\.com/i.test(hostFor(url)) ? "youtube" : "";
@@ -643,7 +649,7 @@
           const button = document.createElement("button");
           button.type = "button";
           button.className = "window-card" + (index === state.window ? " active" : "");
-          button.innerHTML = `<img class="window-thumb" src="${encodeURI(windowData.tabs[0].screenshot)}" alt="" loading="lazy"><span class="window-copy"><span class="window-name">${escapeHtml(trimTitle(windowData.title, "Helium window"))}</span><span class="window-id">HWND ${escapeHtml(windowData.hwnd)}</span></span><span class="tab-count">${windowData.tabs.length}</span>`;
+          button.innerHTML = `<img class="window-thumb" src="${encodeURI(windowData.tabs[0].screenshot)}" alt="" loading="lazy"><span class="window-copy"><span class="window-name">${escapeHtml(trimTitle(windowData.title, "Browser window"))}</span><span class="window-id">${escapeHtml(browserName(windowData))} · HWND ${escapeHtml(windowData.hwnd)}</span></span><span class="tab-count">${windowData.tabs.length}</span>`;
           button.addEventListener("click", () => selectWindow(index));
           return button;
         }));
@@ -668,8 +674,10 @@
         const windowData = currentWindow();
         const tab = currentTab();
         const url = externalUrl(tab.url);
-        elements.windowTitle.textContent = `${trimTitle(windowData.title, "Helium")} — Helium`;
-        elements.addressText.textContent = tab.url || "helium://newtab";
+        elements.windowTitle.textContent = `${trimTitle(windowData.title, "New Tab")} — ${browserName(windowData)}`;
+        elements.browserBrand.className = `browser-brand ${browserClass(windowData)}`;
+        elements.browserBrand.textContent = browserShortName(windowData);
+        elements.addressText.textContent = tab.url || (browserName(windowData) === "Google Chrome" ? "chrome://newtab" : "helium://newtab");
         elements.address.href = url || "javascript:void(0)";
         elements.address.style.cursor = url ? "pointer" : "default";
         elements.loading.hidden = false;
@@ -683,7 +691,7 @@
         elements.tabPosition.textContent = `${state.tab + 1} / ${windowData.tabs.length}`;
         elements.previous.disabled = state.tab === 0;
         elements.next.disabled = state.tab === windowData.tabs.length - 1;
-        document.title = `${trimTitle(tab.title, "New Tab")} · Helium Archive`;
+        document.title = `${trimTitle(tab.title, "New Tab")} · Browser Tabs Session Recorder`;
       }
 
       function renderTaskbar() {
@@ -691,8 +699,8 @@
           const button = document.createElement("button");
           button.type = "button";
           button.className = "task-window" + (index === state.window ? " active" : "");
-          button.title = trimTitle(windowData.title, "Helium window");
-          button.innerHTML = '<span class="browser-brand">He</span>';
+          button.title = `${trimTitle(windowData.title, "Browser window")} — ${browserName(windowData)}`;
+          button.innerHTML = browserBrand(windowData);
           button.addEventListener("click", () => selectWindow(index));
           return button;
         }));
@@ -790,7 +798,7 @@
           const button = document.createElement("button");
           button.type = "button";
           button.className = "overview-card";
-          button.innerHTML = `<img src="${encodeURI(activeTab.screenshot)}" alt="" loading="lazy"><span class="overview-copy"><strong>${escapeHtml(trimTitle(windowData.title, "Helium window"))}</strong><small>HWND ${escapeHtml(windowData.hwnd)} · ${windowData.tabs.length} tabs</small></span>`;
+          button.innerHTML = `<img src="${encodeURI(activeTab.screenshot)}" alt="" loading="lazy"><span class="overview-copy"><strong>${escapeHtml(trimTitle(windowData.title, "Browser window"))}</strong><small>${escapeHtml(browserName(windowData))} · HWND ${escapeHtml(windowData.hwnd)} · ${windowData.tabs.length} tabs</small></span>`;
           button.addEventListener("click", () => { elements.dialog.close(); selectWindow(index); });
           return button;
         }));

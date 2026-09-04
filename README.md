@@ -1,17 +1,17 @@
-# Helium Workspace Archive
+# Browser Tabs Session Recorder
 
-Capture every open Helium tab across Windows virtual desktops and browse the resulting screenshots in a local, browser-like viewer.
+Capture every open Helium and Google Chrome tab across Windows virtual desktops and browse the resulting screenshots in a local, browser-like viewer.
 
 The generated viewer reproduces the desktop, window, and tab hierarchy. It supports virtual desktop switching, window selection, browser-style tabs, global search, Task View, zoom, fullscreen, and keyboard navigation.
 
 ## Requirements
 
 - Windows 10 or Windows 11
-- Helium browser
+- Helium and/or Google Chrome
 - Windows PowerShell 5.1
 - The PowerShell `VirtualDesktop` module
 - GNU Make, if using the Makefile commands
-- Tab Freezer installed in Helium if captured windows should be frozen afterward
+- Tab Freezer installed in each browser if captured windows should be frozen afterward
 
 Install the required PowerShell module for the current user:
 
@@ -28,6 +28,7 @@ make all
 ```
 
 This runs the capture and then generates `index.html` from `tabs.md`.
+By default, capture includes both supported browsers; pass `-Browser Helium` or `-Browser Chrome` to limit it.
 
 Open the finished viewer:
 
@@ -41,9 +42,10 @@ make open
 
 | Command | Purpose |
 | --- | --- |
-| `make all` | Capture every Helium tab and generate the viewer |
+| `make all` | Capture every Helium and Chrome tab and generate the viewer |
 | `make capture` | Run the capture only |
-| `make capture HWND=67934` | Capture only one Helium window for testing |
+| `make capture BROWSER=Chrome` | Capture only Google Chrome windows |
+| `make capture HWND=67934` | Capture only one browser window for testing |
 | `make index` | Rebuild `index.html` from the existing `tabs.md` |
 | `make open` | Generate and open the viewer |
 | `make check` | Check required scripts and the `VirtualDesktop` module |
@@ -53,6 +55,7 @@ make open
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\capture.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\capture.ps1 -Browser Chrome
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-index.ps1
 Start-Process .\index.html
 ```
@@ -76,10 +79,10 @@ To generate a viewer from another Markdown file:
 
 During capture, `capture.ps1`:
 
-1. Finds Helium windows on every virtual desktop.
+1. Finds Helium and Google Chrome windows on every virtual desktop.
 2. Switches desktops and brings each window to the foreground.
 3. Selects every tab and records its title and URL.
-4. Pauses playing Helium media through the Windows media session API.
+4. Pauses playing media from the selected browsers through the Windows media session API.
 5. Saves a screenshot for each tab.
 6. Restores the selected tab and clicks the Tab Freezer extension.
 7. Attempts to restore the original desktop and foreground window.

@@ -34,7 +34,7 @@ function Get-RelativeFilePath([string]$BaseDirectory, [string]$FilePath) {
 }
 
 foreach ($line in $lines) {
-    if ($line -match '^# Helium Tabs - (\d{4}-\d{2}-\d{2}) (\d{2})[:.](\d{2})\s*$') {
+    if ($line -match '^# (?:Browser Tabs Session Recorder|Helium Tabs) - (\d{4}-\d{2}-\d{2}) (\d{2})[:.](\d{2})\s*$') {
         $capturedAt = '{0}T{1}:{2}:00' -f $Matches[1], $Matches[2], $Matches[3]
         continue
     }
@@ -54,12 +54,13 @@ foreach ($line in $lines) {
         continue
     }
 
-    if ($line -match '^### Window: (.*) \(hwnd ([^,]+), (\d+) tabs\)\s*$') {
+    if ($line -match '^### Window: (.*) \((?:(Helium|Google Chrome), )?hwnd ([^,]+), (\d+) tabs\)\s*$') {
         if ($null -eq $desktop) { throw "Window found before a desktop heading: $line" }
         $window = [ordered]@{
-            hwnd = $Matches[2]
+            hwnd = $Matches[3]
             title = $Matches[1]
-            expectedTabs = [int]$Matches[3]
+            browser = $(if ($Matches[2]) { $Matches[2] } else { 'Helium' })
+            expectedTabs = [int]$Matches[4]
             tabs = @()
         }
         $desktop.windows += $window

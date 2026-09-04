@@ -1,10 +1,14 @@
-# Helium tab capture: iterates every Helium window on every virtual desktop,
+# Browser tab capture: iterates every Helium and Google Chrome window on every virtual desktop,
 # selects each tab, pauses any playing media (Windows media session API),
 # screenshots the window, then clicks the "Tab Freezer" extension before
 # moving to the next window. Output: tabs.md + screenshots/*.jpg
 # Run with Windows PowerShell 5.1 (WinRT media API).
 
-param([int64]$OnlyHwnd = 0)   # for testing: process a single window
+param(
+    [ValidateSet('All', 'Helium', 'Chrome')]
+    [string]$Browser = 'All',
+    [int64]$OnlyHwnd = 0   # for testing: process a single window
+)
 $ErrorActionPreference = 'Continue'
 $OutDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ShotDir = Join-Path $OutDir 'screenshots'
@@ -66,7 +70,7 @@ function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null,
 $MgrType   = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
 $PropsType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties]
 
-function Pause-HeliumMedia {
+function Pause-BrowserMedia {
     # Returns list of titles that were playing and got paused. Loops because Chromium
     # surfaces one active session at a time; pausing one may reveal another.
     $paused = @()
@@ -75,7 +79,7 @@ function Pause-HeliumMedia {
         try {
             $mgr = Await ($MgrType::RequestAsync()) $MgrType
             foreach ($s in $mgr.GetSessions()) {
-                if ($s.SourceAppUserModelId -notmatch 'Helium') { continue }
+                if ($s.SourceAppUserModelId -notmatch $script:MediaAppPattern) { continue }
                 if ($s.GetPlaybackInfo().PlaybackStatus -ne 'Playing') { continue }
                 $found = $true
                 $title = try { (Await ($s.TryGetMediaPropertiesAsync()) $PropsType).Title } catch { '?' }
@@ -91,7 +95,7 @@ function Pause-HeliumMedia {
 }
 
 # ---------- window helpers ----------
-function Get-HeliumWindows {
+function Get-BrowserWindows {
     $list = New-Object System.Collections.ArrayList
     $cb = [X.U+EnumWindowsProc]{
         param($h, $l)
@@ -99,12 +103,24 @@ function Get-HeliumWindows {
         if ($c.ToString() -eq 'Chrome_WidgetWin_1' -and [X.U]::IsWindowVisible($h)) {
             $t = New-Object System.Text.StringBuilder 1024; [X.U]::GetWindowText($h, $t, 1024) | Out-Null
             $title = $t.ToString()
-            if ($title -match ' - Helium$') {
-                [uint32]$procId = 0; [X.U]::GetWindowThreadProcessId($h, [ref]$procId) | Out-Null
-                $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
-                if ($p -and $p.Path -match 'Helium') {
-                    $null = $list.Add([pscustomobject]@{ Hwnd = [int64]$h; Title = ($title -replace ' - Helium$', '') })
+            [uint32]$procId = 0; [X.U]::GetWindowThreadProcessId($h, [ref]$procId) | Out-Null
+            $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
+            $definition = $script:BrowserDefinitions | Where-Object {
+                $p -and $p.ProcessName -ieq $_.ProcessName -and
+                ($title -eq $_.Name -or $title.EndsWith($_.TitleSuffix, [StringComparison]::OrdinalIgnoreCase))
+            } | Select-Object -First 1
+            if ($definition) {
+                $windowTitle = $title
+                if ($windowTitle -eq $definition.Name) {
+                    $windowTitle = 'New Tab'
+                } elseif ($windowTitle.EndsWith($definition.TitleSuffix, [StringComparison]::OrdinalIgnoreCase)) {
+                    $windowTitle = $windowTitle.Substring(0, $windowTitle.Length - $definition.TitleSuffix.Length)
                 }
+                $null = $list.Add([pscustomobject]@{
+                    Hwnd = [int64]$h
+                    Title = $windowTitle
+                    Browser = $definition.Name
+                })
             }
         }
         $true
@@ -131,7 +147,7 @@ function Clean-TabName($n) {
 }
 
 function Reveal-Toolbar($hwnd) {
-    # Helium auto-hides the tab strip/toolbar; hovering the top edge reveals it.
+    # This reveals Helium's auto-hidden toolbar and is harmless when Chrome's toolbar is visible.
     $r = New-Object X.U+RECT; [X.U]::GetWindowRect([IntPtr]$hwnd, [ref]$r) | Out-Null
     $x = [int](($r.L + $r.R) / 2); $y = [Math]::Max(0, $r.T + 2)
     [X.U]::SetCursorPos($x, $y) | Out-Null
@@ -175,6 +191,13 @@ function Save-Screenshot($hwnd, $path) {
 }
 
 # ---------- main ----------
+$allBrowserDefinitions = @(
+    [pscustomobject]@{ Key = 'Helium'; Name = 'Helium'; ProcessName = 'helium'; TitleSuffix = ' - Helium'; MediaPattern = 'Helium' }
+    [pscustomobject]@{ Key = 'Chrome'; Name = 'Google Chrome'; ProcessName = 'chrome'; TitleSuffix = ' - Google Chrome'; MediaPattern = 'Chrome' }
+)
+$script:BrowserDefinitions = if ($Browser -eq 'All') { $allBrowserDefinitions } else { @($allBrowserDefinitions | Where-Object Key -eq $Browser) }
+$script:MediaAppPattern = '({0})' -f (($script:BrowserDefinitions | ForEach-Object MediaPattern) -join '|')
+
 $origDesktop = Get-CurrentDesktop
 $origFg = [X.U]::GetForegroundWindow()
 $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
@@ -184,10 +207,10 @@ $ocCond = New-Object System.Windows.Automation.AndCondition((Cond $ae::ClassName
 $oc = $ae::RootElement.FindFirst($ts::Children, $ocCond)
 if ($oc) { $opencodeHwnd = $oc.Current.NativeWindowHandle; [X.U]::ShowWindow([IntPtr]$opencodeHwnd, 6) | Out-Null; Log "Minimized OpenCode window $opencodeHwnd" }
 
-$windows = Get-HeliumWindows
+$windows = Get-BrowserWindows
 if ($OnlyHwnd) { $windows = @($windows | Where-Object Hwnd -eq $OnlyHwnd) }
 foreach ($w in $windows) { $di = Get-DesktopInfo $w.Hwnd; $w | Add-Member DesktopIndex $di.Index; $w | Add-Member DesktopName $di.Name }
-Log "Found $($windows.Count) Helium windows"
+Log "Found $($windows.Count) supported browser windows"
 
 $results = @()   # per tab records
 $totalTabs = 0
@@ -232,15 +255,15 @@ foreach ($grp in $groups) {
             Start-Sleep -Milliseconds $(if ($wasInactive) { $InactiveTabLoadDelayMs } else { $ActiveTabLoadDelayMs })
             Wait-PageLoad $win $PageLoadTimeoutMs
 
-            # pause any playing media (this tab or any other Helium tab); re-check once since
+            # pause any playing media (this tab or another selected browser tab); re-check once since
             # reloaded pages (e.g. YouTube) often start playback a moment after load
-            $paused = @(Pause-HeliumMedia)
+            $paused = @(Pause-BrowserMedia)
             Start-Sleep -Milliseconds 700
-            $paused += Pause-HeliumMedia
+            $paused += Pause-BrowserMedia
             $nowName = try { $t.Current.Name } catch { $rawName }
             if ($nowName -match 'Audio playing') {
                 Start-Sleep -Milliseconds 600
-                $paused += Pause-HeliumMedia
+                $paused += Pause-BrowserMedia
                 $nowName = try { $t.Current.Name } catch { $nowName }
             }
             $paused = @($paused | Select-Object -Unique)
@@ -260,7 +283,7 @@ foreach ($grp in $groups) {
             $title = Clean-TabName $nowName
             Log "  [$tIdx/$($tabs.Count)] $title  $(if($audioFlag){'[audio]'})"
             $results += [pscustomobject]@{
-                DesktopIndex = $dIdx; DesktopName = $w.DesktopName; Hwnd = $w.Hwnd; WindowTitle = $w.Title
+                DesktopIndex = $dIdx; DesktopName = $w.DesktopName; Hwnd = $w.Hwnd; WindowTitle = $w.Title; Browser = $w.Browser
                 TabIndex = $tIdx; Title = $title; Url = $url; WasInactive = $wasInactive
                 AudioWasPlaying = $audioFlag; Paused = ($paused -join '; '); StillPlaying = $stillPlaying
                 Screenshot = $(if ($ok) { "screenshots/$file" } else { '' }); Selected = $selected
@@ -278,7 +301,7 @@ foreach ($grp in $groups) {
         }
         Log "  Tab Freezer clicked: $froze"
         Start-Sleep -Milliseconds 800
-        Pause-HeliumMedia | Out-Null
+        Pause-BrowserMedia | Out-Null
         if ($wasIconic) { [X.U]::ShowWindow($h, 6) | Out-Null }
     }
 }
@@ -291,9 +314,9 @@ Activate-Window ([int64]$origFg) | Out-Null
 
 # ---------- markdown ----------
 $sb = New-Object System.Text.StringBuilder
-$null = $sb.AppendLine("# Helium Tabs - $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
+$null = $sb.AppendLine("# Browser Tabs Session Recorder - $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
 $null = $sb.AppendLine()
-$null = $sb.AppendLine("**$($groups.Count) virtual desktops, $($windows.Count) windows, $totalTabs tabs.** Screenshots in ``screenshots/``. Every tab was visited; any playing Helium media was paused via the Windows media session API, and each window was frozen with the Tab Freezer extension after capture.")
+$null = $sb.AppendLine("**$($groups.Count) virtual desktops, $($windows.Count) windows, $totalTabs tabs.** Screenshots in ``screenshots/``. Every tab was visited and playing browser media was paused via the Windows media session API.")
 $null = $sb.AppendLine()
 $null = $sb.AppendLine("## Contents")
 foreach ($g in ($results | Group-Object DesktopIndex | Sort-Object { [int]$_.Name })) {
@@ -306,7 +329,7 @@ foreach ($g in ($results | Group-Object DesktopIndex | Sort-Object { [int]$_.Nam
     $null = $sb.AppendLine()
     foreach ($wg in ($g.Group | Group-Object Hwnd)) {
         $first = $wg.Group[0]
-        $null = $sb.AppendLine("### Window: $($first.WindowTitle) (hwnd $($first.Hwnd), $($wg.Count) tabs)")
+        $null = $sb.AppendLine("### Window: $($first.WindowTitle) ($($first.Browser), hwnd $($first.Hwnd), $($wg.Count) tabs)")
         $null = $sb.AppendLine()
         foreach ($r in ($wg.Group | Sort-Object TabIndex)) {
             $null = $sb.AppendLine("#### $($r.TabIndex). $($r.Title)")
