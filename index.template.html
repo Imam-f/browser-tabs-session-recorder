@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Helium Workspace Archive</title>
+  <style>
+    :root {
+      --ink: #f7f8fb;
+      --muted: #999eac;
+      --line: rgba(255, 255, 255, .105);
+      --panel: rgba(18, 20, 26, .92);
+      --panel-solid: #15171d;
+      --raised: #21242d;
+      --accent: #b9ff62;
+      --accent-2: #61d9ff;
+      --danger: #ff6b79;
+      --shadow: 0 24px 70px rgba(0, 0, 0, .48);
+      --radius: 14px;
+      font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 78% 14%, rgba(74, 124, 153, .23), transparent 34%),
+        radial-gradient(circle at 20% 90%, rgba(142, 185, 76, .13), transparent 32%),
+        linear-gradient(145deg, #101218 0%, #090a0e 62%, #12151c 100%);
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-rows: 82px minmax(0, 1fr) 48px;
+    }
+
+    .desktop-bar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8, 9, 13, .7);
+      backdrop-filter: blur(22px);
+    }
+
+    .archive-mark {
+      min-width: 176px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .helium-logo {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      color: #11150c;
+      background: var(--accent);
+      box-shadow: 0 0 30px rgba(185, 255, 98, .17);
+      font-weight: 800;
+      letter-spacing: -.06em;
+    }
+
+    .archive-mark strong, .archive-mark small { display: block; }
+    .archive-mark strong { font-size: 13px; letter-spacing: .02em; }
+    .archive-mark small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+    .desktop-list {
+      width: 0;
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .desktop-list::-webkit-scrollbar, .tab-strip::-webkit-scrollbar { display: none; }
+
+    .desktop-button {
+      position: relative;
+      min-width: 122px;
+      height: 56px;
+      padding: 7px 10px 7px 43px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      text-align: left;
+      background: rgba(255, 255, 255, .035);
+      cursor: pointer;
+      transition: border-color .15s, background .15s, transform .15s;
+    }
+
+    .desktop-button:hover { background: rgba(255, 255, 255, .075); transform: translateY(-1px); }
+    .desktop-button.active { border-color: rgba(185, 255, 98, .62); background: rgba(185, 255, 98, .085); }
+    .desktop-button.active::after {
+      content: "";
+      position: absolute;
+      inset: auto 10px -1px;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--accent);
+    }
+
+    .desktop-number {
+      position: absolute;
+      left: 10px;
+      top: 9px;
+      width: 25px;
+      height: 35px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      color: var(--muted);
+      background: #0c0e12;
+      font: 600 12px ui-monospace, monospace;
+    }
+
+    .desktop-button.active .desktop-number { color: #11150c; background: var(--accent); }
+    .desktop-label, .desktop-meta { display: block; white-space: nowrap; }
+    .desktop-label { overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 650; }
+    .desktop-meta { margin-top: 4px; color: var(--muted); font-size: 10px; }
+
+    .task-view-button, .icon-button {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .04);
+      cursor: pointer;
+    }
+
+    .task-view-button {
+      flex: 0 0 auto;
+      height: 38px;
+      padding: 0 14px;
+      border-radius: 9px;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .task-view-button:hover, .icon-button:hover { background: rgba(255, 255, 255, .1); }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 238px minmax(0, 1fr);
+      gap: 13px;
+      padding: 13px;
+    }
+
+    .window-rail, .browser-window {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+    }
+
+    .window-rail {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .rail-head { padding: 14px; border-bottom: 1px solid var(--line); }
+    .rail-title { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+    .rail-title strong { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+    .rail-title span { color: var(--muted); font: 11px ui-monospace, monospace; }
+
+    .search-wrap { position: relative; }
+    .search-wrap::before {
+      content: "";
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      border: 1.5px solid var(--muted);
+      border-radius: 50%;
+      transform: translateY(-60%);
+    }
+    .search-wrap::after {
+      content: "";
+      position: absolute;
+      left: 20px;
+      top: 56%;
+      width: 5px;
+      height: 1.5px;
+      background: var(--muted);
+      transform: rotate(45deg);
+    }
+
+    #search {
+      width: 100%;
+      height: 34px;
+      padding: 0 36px 0 30px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: rgba(0, 0, 0, .22);
+      font-size: 11px;
+    }
+
+    #search::placeholder { color: #767b87; }
+    .search-key { position: absolute; right: 8px; top: 9px; color: #6f7480; font: 9px ui-monospace, monospace; }
+
+    .window-list { min-height: 0; padding: 8px; overflow-y: auto; }
+    .window-card {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 8px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      text-align: left;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .window-card:hover { background: rgba(255, 255, 255, .045); }
+    .window-card.active { border-color: rgba(97, 217, 255, .32); background: rgba(97, 217, 255, .08); }
+    .window-thumb {
+      width: 30px;
+      height: 25px;
+      object-fit: cover;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #090a0d;
+    }
+    .window-copy { min-width: 0; }
+    .window-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+    .window-id { display: block; margin-top: 3px; color: var(--muted); font: 9px ui-monospace, monospace; }
+    .tab-count { min-width: 22px; padding: 3px 5px; border-radius: 5px; color: var(--muted); background: rgba(255, 255, 255, .055); text-align: center; font: 9px ui-monospace, monospace; }
+
+    .search-results {
+      display: none;
+      position: absolute;
+      z-index: 20;
+      left: 13px;
+      top: 73px;
+      width: min(540px, calc(100vw - 26px));
+      max-height: min(520px, calc(100vh - 145px));
+      padding: 7px;
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #161920;
+      box-shadow: var(--shadow);
+    }
+    .search-results.open { display: block; }
+    .search-result {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 10px;
+      padding: 7px;
+      border: 0;
+      border-radius: 8px;
+      text-align: left;
+      background: transparent;
+      cursor: pointer;
+    }
+    .search-result:hover { background: rgba(255, 255, 255, .07); }
+    .search-result img { width: 64px; height: 38px; border-radius: 4px; object-fit: cover; }
+    .result-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+    .result-path { display: block; margin-top: 5px; color: var(--muted); font: 9px ui-monospace, monospace; }
+    .empty-result { padding: 20px; color: var(--muted); text-align: center; font-size: 12px; }
+
+    .browser-window {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 34px 43px 42px minmax(0, 1fr) 27px;
+      overflow: hidden;
+      border-radius: var(--radius);
+    }
+
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding-left: 12px;
+      background: #101218;
+      border-bottom: 1px solid rgba(255, 255, 255, .04);
+      user-select: none;
+    }
+    .browser-brand { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; color: #11150c; background: var(--accent); font-size: 9px; font-weight: 800; }
+    #window-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9bdc7; font-size: 10px; }
+    .window-actions { height: 100%; display: flex; }
+    .window-action { width: 42px; height: 100%; border: 0; color: #a9adb7; background: transparent; font-size: 12px; cursor: default; }
+    .window-action:last-child:hover { background: #c42b3a; color: white; }
+    .window-action:not(:last-child):hover { background: rgba(255, 255, 255, .08); }
+
+    .tab-strip {
+      min-width: 0;
+      display: flex;
+      align-items: end;
+      gap: 3px;
+      padding: 6px 8px 0;
+      overflow-x: auto;
+      background: #171920;
+      scrollbar-width: none;
+    }
+    .tab-button {
+      position: relative;
+      min-width: 142px;
+      max-width: 205px;
+      height: 36px;
+      flex: 1 1 165px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 9px 9px 0 0;
+      color: #a8acb6;
+      background: #22252d;
+      cursor: pointer;
+    }
+    .tab-button:hover { background: #292c35; }
+    .tab-button.active { color: var(--ink); background: #30333c; }
+    .tab-button.active::before { content: ""; position: absolute; inset: 0 8px auto; height: 2px; border-radius: 2px; background: var(--accent); }
+    .site-dot { width: 14px; height: 14px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: white; background: #545966; font-size: 7px; font-weight: 700; }
+    .site-dot.youtube { border-radius: 4px; background: #f03; }
+    .tab-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 9px;
+      border-bottom: 1px solid var(--line);
+      background: #30333c;
+    }
+    .icon-button { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px; color: #b3b7c0; font-size: 13px; }
+    .icon-button:disabled { opacity: .35; cursor: default; }
+    .address {
+      min-width: 0;
+      height: 30px;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 11px;
+      border: 1px solid rgba(255, 255, 255, .055);
+      border-radius: 15px;
+      color: #c8cbd2;
+      background: #1d2027;
+      text-decoration: none;
+      font-size: 10px;
+    }
+    .address:hover { border-color: rgba(255, 255, 255, .16); }
+    .lock { color: var(--accent); font-size: 9px; }
+    #address-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .screenshot-stage { position: relative; min-height: 0; overflow: auto; background: #090a0d; }
+    .screenshot-stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+      background-size: 24px 24px;
+      pointer-events: none;
+    }
+    #screenshot {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      background: transparent;
+      cursor: zoom-in;
+    }
+    .screenshot-stage.actual #screenshot { width: auto; min-width: 100%; height: auto; min-height: 100%; object-fit: none; cursor: zoom-out; }
+    .image-loading { position: absolute; z-index: 0; inset: 0; display: grid; place-items: center; color: #555b68; font: 10px ui-monospace, monospace; }
+    .image-tools { position: absolute; z-index: 3; right: 12px; bottom: 12px; display: flex; gap: 6px; opacity: .25; transition: opacity .15s; }
+    .screenshot-stage:hover .image-tools { opacity: 1; }
+    .image-tools .icon-button { background: rgba(15, 17, 22, .82); backdrop-filter: blur(10px); }
+
+    .statusbar {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      background: #171920;
+      font: 9px ui-monospace, monospace;
+    }
+    .statusbar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #tab-position { margin-left: auto; flex: 0 0 auto; color: var(--accent); }
+
+    .taskbar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-top: 1px solid var(--line);
+      background: rgba(16, 18, 23, .86);
+      backdrop-filter: blur(24px);
+    }
+    .start-button { border-color: transparent; background: transparent; }
+    .start-grid { width: 15px; height: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+    .start-grid i { background: var(--accent-2); }
+    .task-window {
+      position: relative;
+      width: 38px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+    }
+    .task-window:hover { background: rgba(255, 255, 255, .07); }
+    .task-window.active { background: rgba(255, 255, 255, .1); }
+    .task-window.active::after { content: ""; position: absolute; left: 9px; right: 9px; bottom: 1px; height: 2px; border-radius: 2px; background: var(--accent); }
+    .task-window .browser-brand { width: 22px; height: 22px; }
+    .clock { position: absolute; right: 16px; color: #c5c8cf; text-align: right; font-size: 10px; line-height: 1.25; }
+
+    dialog {
+      width: min(1180px, calc(100vw - 36px));
+      height: min(760px, calc(100vh - 36px));
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      color: var(--ink);
+      background: rgba(16, 18, 24, .96);
+      box-shadow: 0 30px 100px #000;
+      backdrop-filter: blur(28px);
+    }
+    dialog::backdrop { background: rgba(4, 5, 7, .75); backdrop-filter: blur(8px); }
+    .overview { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+    .overview-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    .overview-head h2 { margin: 0; flex: 1; font-size: 15px; }
+    .overview-head span { color: var(--muted); font: 10px ui-monospace, monospace; }
+    .overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px; padding: 18px; overflow-y: auto; }
+    .overview-card { min-width: 0; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; text-align: left; background: #0b0d11; cursor: pointer; transition: border-color .15s, transform .15s; }
+    .overview-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .overview-card img { width: 100%; aspect-ratio: 16 / 9; display: block; object-fit: cover; object-position: top; background: #08090c; }
+    .overview-copy { padding: 10px; }
+    .overview-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+    .overview-copy small { display: block; margin-top: 5px; color: var(--muted); font: 9px ui-monospace, monospace; }
+
+    .mobile-windows { display: none; }
+
+    @media (max-width: 760px) {
+      .app { grid-template-rows: 68px minmax(0, 1fr) 46px; }
+      .desktop-bar { gap: 8px; padding: 8px; }
+      .archive-mark { min-width: auto; }
+      .archive-mark > div:last-child { display: none; }
+      .helium-logo { width: 34px; height: 34px; }
+      .desktop-button { min-width: 94px; height: 48px; padding: 6px 7px 6px 37px; }
+      .desktop-number { left: 7px; top: 7px; width: 24px; height: 32px; }
+      .desktop-meta { display: none; }
+      .task-view-button { width: 36px; padding: 0; overflow: hidden; color: transparent; }
+      .task-view-button::after { content: "▦"; color: var(--ink); }
+      .workspace { display: block; padding: 5px; }
+      .browser-window { height: 100%; grid-template-rows: 32px 39px 39px minmax(0, 1fr) 25px; border-radius: 10px; }
+      .window-rail { display: none; position: absolute; z-index: 15; inset: 73px auto 51px 5px; width: min(285px, calc(100vw - 10px)); }
+      .window-rail.open { display: flex; }
+      .mobile-windows { display: grid; }
+      .tab-button { min-width: 125px; height: 32px; }
+      .window-action { width: 34px; }
+      .toolbar { gap: 4px; padding-inline: 5px; }
+      .toolbar .icon-button:nth-of-type(3) { display: none; }
+      .clock { display: none; }
+      .image-tools { opacity: .85; }
+      .statusbar #status-title { display: none; }
+      .overview-grid { grid-template-columns: 1fr; padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="desktop-bar">
+      <div class="archive-mark">
+        <div class="helium-logo">He</div>
+        <div><strong>Helium workspace</strong><small id="archive-date">Captured workspace</small></div>
+      </div>
+      <nav class="desktop-list" id="desktop-list" aria-label="Virtual desktops"></nav>
+      <button class="task-view-button" id="task-view" type="button">Task view&nbsp;&nbsp; Win+Tab</button>
+    </header>
+
+    <section class="workspace">
+      <aside class="window-rail" id="window-rail">
+        <div class="rail-head">
+          <div class="rail-title"><strong>Windows</strong><span id="rail-count"></span></div>
+          <div class="search-wrap">
+            <input id="search" type="search" placeholder="Search all 415 tabs" autocomplete="off">
+            <span class="search-key">Ctrl K</span>
+          </div>
+        </div>
+        <div class="window-list" id="window-list"></div>
+      </aside>
+      <div class="search-results" id="search-results"></div>
+
+      <article class="browser-window" id="browser-window">
+        <div class="titlebar">
+          <div class="browser-brand">He</div>
+          <span id="window-title"></span>
+          <div class="window-actions" aria-hidden="true">
+            <button class="window-action" tabindex="-1">─</button>
+            <button class="window-action" tabindex="-1">□</button>
+            <button class="window-action" tabindex="-1">×</button>
+          </div>
+        </div>
+        <nav class="tab-strip" id="tab-strip" aria-label="Browser tabs"></nav>
+        <div class="toolbar">
+          <button class="icon-button mobile-windows" id="mobile-windows" type="button" title="Windows">▤</button>
+          <button class="icon-button" id="previous-tab" type="button" title="Previous tab (Alt+Left)">←</button>
+          <button class="icon-button" id="next-tab" type="button" title="Next tab (Alt+Right)">→</button>
+          <button class="icon-button" id="reload-image" type="button" title="Reload screenshot">↻</button>
+          <a class="address" id="address" target="_blank" rel="noreferrer">
+            <span class="lock">●</span><span id="address-text"></span>
+          </a>
+          <button class="icon-button" id="fullscreen" type="button" title="Fullscreen">□</button>
+        </div>
+        <div class="screenshot-stage" id="screenshot-stage">
+          <div class="image-loading" id="image-loading">Loading captured tab...</div>
+          <img id="screenshot" alt="">
+          <div class="image-tools">
+            <button class="icon-button" id="zoom" type="button" title="Actual size">＋</button>
+            <button class="icon-button" id="open-image" type="button" title="Open original image">↗</button>
+          </div>
+        </div>
+        <footer class="statusbar">
+          <span id="status-desktop"></span><span id="status-window"></span><span id="status-title"></span><span id="tab-position"></span>
+        </footer>
+      </article>
+    </section>
+
+    <footer class="taskbar">
+      <button class="icon-button start-button" type="button" id="taskbar-task-view" title="Task view">
+        <span class="start-grid"><i></i><i></i><i></i><i></i></span>
+      </button>
+      <div id="task-windows" style="display:flex;gap:4px"></div>
+      <div class="clock"><span id="clock-time"></span><br><span id="clock-date"></span></div>
+    </footer>
+  </main>
+
+  <dialog id="overview-dialog">
+    <div class="overview">
+      <header class="overview-head"><h2 id="overview-title">Task view</h2><span id="overview-meta"></span><button class="icon-button" id="close-overview" type="button">×</button></header>
+      <div class="overview-grid" id="overview-grid"></div>
+    </div>
+  </dialog>
+
+  <script>/*__HELIUM_ARCHIVE_DATA__*/</script>
+  <script>
+    (() => {
+      "use strict";
+
+      const data = window.HELIUM_DATA || [];
+      const meta = window.HELIUM_META || {};
+      const $ = (selector) => document.querySelector(selector);
+      const elements = {
+        desktopList: $("#desktop-list"), windowList: $("#window-list"), tabStrip: $("#tab-strip"),
+        screenshot: $("#screenshot"), stage: $("#screenshot-stage"), loading: $("#image-loading"),
+        windowTitle: $("#window-title"), address: $("#address"), addressText: $("#address-text"),
+        railCount: $("#rail-count"), search: $("#search"), searchResults: $("#search-results"),
+        statusDesktop: $("#status-desktop"), statusWindow: $("#status-window"), statusTitle: $("#status-title"),
+        tabPosition: $("#tab-position"), previous: $("#previous-tab"), next: $("#next-tab"),
+        taskWindows: $("#task-windows"), dialog: $("#overview-dialog"), overviewGrid: $("#overview-grid"),
+        overviewTitle: $("#overview-title"), overviewMeta: $("#overview-meta"), rail: $("#window-rail")
+      };
+
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem("helium-viewer-state")) || {}; } catch (_) {}
+      const state = {
+        desktop: Math.min(saved.desktop || 0, Math.max(data.length - 1, 0)),
+        window: saved.window || 0,
+        tab: saved.tab || 0
+      };
+
+      const totalTabs = data.reduce((total, desktop) => total + desktop.tabCount, 0);
+      elements.search.placeholder = `Search all ${totalTabs} tabs`;
+      if (meta.capturedAt) {
+        const capturedDate = new Date(meta.capturedAt);
+        $("#archive-date").textContent = `${capturedDate.toLocaleDateString(undefined, {day: "2-digit", month: "short", year: "numeric"})} · captured state`;
+      }
+
+      const currentDesktop = () => data[state.desktop];
+      const currentWindow = () => currentDesktop().windows[state.window];
+      const currentTab = () => currentWindow().tabs[state.tab];
+      const trimTitle = (title, fallback) => (title || fallback || "Untitled").replace(/\s+-\s+YouTube(?:\s+-.*)?$/, "");
+      const hostFor = (url) => {
+        if (!url) return "new tab";
+        const clean = url.replace(/^[a-z-]+:\/\//i, "");
+        return clean.split(/[/?#]/)[0] || "local";
+      };
+      const externalUrl = (url) => {
+        if (!url || /^(helium|chrome-extension):/i.test(url)) return "";
+        return /^https?:\/\//i.test(url) ? url : "https://" + url;
+      };
+      const siteClass = (url) => /(^|\.)youtube\.com/i.test(hostFor(url)) ? "youtube" : "";
+      const siteLetter = (url) => siteClass(url) ? "▶" : hostFor(url).charAt(0).toUpperCase();
+
+      function save() {
+        localStorage.setItem("helium-viewer-state", JSON.stringify(state));
+      }
+
+      function normalizeState() {
+        state.window = Math.min(Math.max(state.window, 0), currentDesktop().windows.length - 1);
+        state.tab = Math.min(Math.max(state.tab, 0), currentWindow().tabs.length - 1);
+      }
+
+      function renderDesktops() {
+        elements.desktopList.replaceChildren(...data.map((desktop, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "desktop-button" + (index === state.desktop ? " active" : "");
+          button.innerHTML = `<span class="desktop-number">${desktop.index + 1}</span><span class="desktop-label">${escapeHtml(desktop.name)}</span><span class="desktop-meta">${desktop.windows.length} windows · ${desktop.tabCount} tabs</span>`;
+          button.addEventListener("click", () => selectDesktop(index));
+          return button;
+        }));
+        elements.desktopList.querySelector(".active")?.scrollIntoView({block: "nearest", inline: "center"});
+      }
+
+      function renderWindows() {
+        const desktop = currentDesktop();
+        elements.railCount.textContent = `${desktop.windows.length} / ${desktop.tabCount}`;
+        elements.windowList.replaceChildren(...desktop.windows.map((windowData, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "window-card" + (index === state.window ? " active" : "");
+          button.innerHTML = `<img class="window-thumb" src="${encodeURI(windowData.tabs[0].screenshot)}" alt="" loading="lazy"><span class="window-copy"><span class="window-name">${escapeHtml(trimTitle(windowData.title, "Helium window"))}</span><span class="window-id">HWND ${escapeHtml(windowData.hwnd)}</span></span><span class="tab-count">${windowData.tabs.length}</span>`;
+          button.addEventListener("click", () => selectWindow(index));
+          return button;
+        }));
+      }
+
+      function renderTabs() {
+        const windowData = currentWindow();
+        elements.tabStrip.replaceChildren(...windowData.tabs.map((tab, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "tab-button" + (index === state.tab ? " active" : "");
+          button.title = tab.title;
+          button.innerHTML = `<span class="site-dot ${siteClass(tab.url)}">${siteLetter(tab.url)}</span><span class="tab-text">${escapeHtml(trimTitle(tab.title, "New Tab"))}</span>`;
+          button.addEventListener("click", () => selectTab(index));
+          return button;
+        }));
+        elements.tabStrip.querySelector(".active")?.scrollIntoView({behavior: "smooth", block: "nearest", inline: "center"});
+      }
+
+      function renderScreenshot() {
+        const desktop = currentDesktop();
+        const windowData = currentWindow();
+        const tab = currentTab();
+        const url = externalUrl(tab.url);
+        elements.windowTitle.textContent = `${trimTitle(windowData.title, "Helium")} — Helium`;
+        elements.addressText.textContent = tab.url || "helium://newtab";
+        elements.address.href = url || "javascript:void(0)";
+        elements.address.style.cursor = url ? "pointer" : "default";
+        elements.loading.hidden = false;
+        elements.loading.textContent = "Loading captured tab...";
+        elements.screenshot.alt = `Screenshot of ${tab.title || "New Tab"}`;
+        elements.screenshot.src = encodeURI(tab.screenshot);
+        elements.stage.classList.remove("actual");
+        elements.statusDesktop.textContent = desktop.name;
+        elements.statusWindow.textContent = `HWND ${windowData.hwnd}`;
+        elements.statusTitle.textContent = trimTitle(tab.title, "New Tab");
+        elements.tabPosition.textContent = `${state.tab + 1} / ${windowData.tabs.length}`;
+        elements.previous.disabled = state.tab === 0;
+        elements.next.disabled = state.tab === windowData.tabs.length - 1;
+        document.title = `${trimTitle(tab.title, "New Tab")} · Helium Archive`;
+      }
+
+      function renderTaskbar() {
+        elements.taskWindows.replaceChildren(...currentDesktop().windows.map((windowData, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "task-window" + (index === state.window ? " active" : "");
+          button.title = trimTitle(windowData.title, "Helium window");
+          button.innerHTML = '<span class="browser-brand">He</span>';
+          button.addEventListener("click", () => selectWindow(index));
+          return button;
+        }));
+      }
+
+      function renderAll() {
+        if (!data.length) {
+          elements.loading.textContent = "No archive data was embedded";
+          return;
+        }
+        normalizeState();
+        renderDesktops();
+        renderWindows();
+        renderTabs();
+        renderScreenshot();
+        renderTaskbar();
+        save();
+      }
+
+      function selectDesktop(index) {
+        state.desktop = index;
+        state.window = 0;
+        state.tab = 0;
+        closeSearch();
+        renderAll();
+      }
+
+      function selectWindow(index) {
+        state.window = index;
+        state.tab = 0;
+        closeSearch();
+        elements.rail.classList.remove("open");
+        renderWindows();
+        renderTabs();
+        renderScreenshot();
+        renderTaskbar();
+        save();
+      }
+
+      function selectTab(index) {
+        state.tab = index;
+        closeSearch();
+        renderTabs();
+        renderScreenshot();
+        save();
+      }
+
+      function navigateTab(delta) {
+        const next = state.tab + delta;
+        if (next >= 0 && next < currentWindow().tabs.length) selectTab(next);
+      }
+
+      function escapeHtml(value) {
+        const span = document.createElement("span");
+        span.textContent = String(value);
+        return span.innerHTML;
+      }
+
+      function runSearch(query) {
+        const term = query.trim().toLocaleLowerCase();
+        if (!term) return closeSearch();
+        const matches = [];
+        data.forEach((desktop, desktopIndex) => desktop.windows.forEach((windowData, windowIndex) => windowData.tabs.forEach((tab, tabIndex) => {
+          if (`${tab.title} ${tab.url} ${windowData.title}`.toLocaleLowerCase().includes(term)) {
+            matches.push({desktop, desktopIndex, windowData, windowIndex, tab, tabIndex});
+          }
+        })));
+        const visible = matches.slice(0, 60);
+        elements.searchResults.replaceChildren(...(visible.length ? visible.map((match) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "search-result";
+          button.innerHTML = `<img src="${encodeURI(match.tab.screenshot)}" alt="" loading="lazy"><span><span class="result-title">${escapeHtml(trimTitle(match.tab.title, "New Tab"))}</span><span class="result-path">${escapeHtml(match.desktop.name)} · HWND ${escapeHtml(match.windowData.hwnd)} · tab ${match.tabIndex + 1}</span></span>`;
+          button.addEventListener("click", () => {
+            state.desktop = match.desktopIndex;
+            state.window = match.windowIndex;
+            state.tab = match.tabIndex;
+            elements.search.value = "";
+            renderAll();
+            closeSearch();
+          });
+          return button;
+        }) : [Object.assign(document.createElement("div"), {className: "empty-result", textContent: "No captured tabs found"})]));
+        elements.searchResults.classList.add("open");
+      }
+
+      function closeSearch() { elements.searchResults.classList.remove("open"); }
+
+      function showOverview() {
+        const desktop = currentDesktop();
+        elements.overviewTitle.textContent = `${desktop.name} task view`;
+        elements.overviewMeta.textContent = `${desktop.windows.length} WINDOWS / ${desktop.tabCount} TABS`;
+        elements.overviewGrid.replaceChildren(...desktop.windows.map((windowData, index) => {
+          const activeTab = index === state.window ? windowData.tabs[state.tab] : windowData.tabs[0];
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "overview-card";
+          button.innerHTML = `<img src="${encodeURI(activeTab.screenshot)}" alt="" loading="lazy"><span class="overview-copy"><strong>${escapeHtml(trimTitle(windowData.title, "Helium window"))}</strong><small>HWND ${escapeHtml(windowData.hwnd)} · ${windowData.tabs.length} tabs</small></span>`;
+          button.addEventListener("click", () => { elements.dialog.close(); selectWindow(index); });
+          return button;
+        }));
+        elements.dialog.showModal();
+      }
+
+      elements.screenshot.addEventListener("load", () => { elements.loading.hidden = true; });
+      elements.screenshot.addEventListener("error", () => { elements.loading.hidden = false; elements.loading.textContent = "Screenshot could not be loaded"; });
+      elements.screenshot.addEventListener("click", () => elements.stage.classList.toggle("actual"));
+      elements.search.addEventListener("input", (event) => runSearch(event.target.value));
+      elements.search.addEventListener("keydown", (event) => { if (event.key === "Escape") { elements.search.value = ""; closeSearch(); elements.search.blur(); } });
+      elements.previous.addEventListener("click", () => navigateTab(-1));
+      elements.next.addEventListener("click", () => navigateTab(1));
+      $("#reload-image").addEventListener("click", () => { const src = elements.screenshot.src; elements.screenshot.src = ""; elements.screenshot.src = src; });
+      $("#zoom").addEventListener("click", () => elements.stage.classList.toggle("actual"));
+      $("#open-image").addEventListener("click", () => window.open(currentTab().screenshot, "_blank"));
+      $("#fullscreen").addEventListener("click", () => $("#browser-window").requestFullscreen?.());
+      $("#task-view").addEventListener("click", showOverview);
+      $("#taskbar-task-view").addEventListener("click", showOverview);
+      $("#close-overview").addEventListener("click", () => elements.dialog.close());
+      $("#mobile-windows").addEventListener("click", () => elements.rail.classList.toggle("open"));
+      document.addEventListener("pointerdown", (event) => {
+        if (!elements.searchResults.contains(event.target) && event.target !== elements.search) closeSearch();
+        if (innerWidth <= 760 && !elements.rail.contains(event.target) && event.target !== $("#mobile-windows")) elements.rail.classList.remove("open");
+      });
+      document.addEventListener("keydown", (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); elements.search.focus(); elements.search.select(); }
+        if (event.altKey && event.key === "ArrowLeft") { event.preventDefault(); navigateTab(-1); }
+        if (event.altKey && event.key === "ArrowRight") { event.preventDefault(); navigateTab(1); }
+        if (event.ctrlKey && event.key === "Tab") { event.preventDefault(); navigateTab(event.shiftKey ? -1 : 1); }
+        if (event.key === "Escape" && !elements.dialog.open) elements.rail.classList.remove("open");
+      });
+
+      const capturedAt = meta.capturedAt ? new Date(meta.capturedAt) : new Date();
+      const capturedMinutes = capturedAt.getHours() * 60 + capturedAt.getMinutes();
+      const openedAt = Date.now();
+      function updateClock() {
+        const elapsed = Math.floor((Date.now() - openedAt) / 60000);
+        const minutes = capturedMinutes + elapsed;
+        $("#clock-time").textContent = `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+      }
+      updateClock();
+      $("#clock-date").textContent = capturedAt.toLocaleDateString();
+      setInterval(updateClock, 30000);
+      renderAll();
+    })();
+  </script>
+</body>
+</html>
